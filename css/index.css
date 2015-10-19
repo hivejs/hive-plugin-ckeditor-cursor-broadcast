@@ -1,0 +1,18 @@
+.Cursors {
+  position: absolute;
+  pointer-events: none;
+  overflow-y: hidden;
+}
+
+.Cursors__Cursor {
+  position: absolute;
+  border: 2px transparent solid;
+  opacity: 0.5;
+}
+
+.Cursors__Label {
+  position: absolute;
+  color: #777;
+  font-size: .3cm;
+  text-shadow: 0 0 5px #fff;
+}
