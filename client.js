@@ -136,7 +136,7 @@ function setup(plugin, imports, register) {
           .concat(
           // Scroll fix! To ensure scrollability we add an empty cursor right at teh end of the document
           h('div.Cursors__Cursor', {style: {
-            top: ctx.editableDocument.rootNode.clientHeight+'px'
+            top: (ctx.editableDocument.rootNode.clientHeight+100)+'px' // +100 because there might be some margin or sth, better safe than sorry...
           }})
           )
 
