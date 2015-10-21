@@ -33,7 +33,7 @@ function setup(plugin, imports, register) {
 
   var link = document.createElement('link')
   link.setAttribute('rel', 'stylesheet')
-  link.setAttribute('href', ui.baseURL+'/static/hive-plugin-ckeditor-cursor-broadcast/css/index.css')
+  link.setAttribute('href', ui.baseURL+'/static/hive-plugin-cursor-broadcast-ckeditor/css/index.css')
   document.head.appendChild(link)
 
   ui.page('/documents/:id', function(ctx, next) {
