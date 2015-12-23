@@ -27,10 +27,10 @@ function setup(plugin, imports, register) {
     , broadcast = imports.broadcast
 
   assets.registerModule(path.join(__dirname, 'client.js'))
-  assets.registerStaticDir(path.join(__dirname, 'css'))
-  
+  assets.registerStylesheet(path.join(__dirname, 'css/index.css'))
+
   var cursors = {}
-  
+
   broadcast.registerChannel(new Buffer('cursors'), function(user, document, client, brdcst) {
     if(!cursors[document]) cursors[document] = {}
 

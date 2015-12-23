@@ -20,137 +20,141 @@ var vdom = require('virtual-dom')
   , h = vdom.h
   , nodeAt = require('dom-ot/lib/ops/node-at')
   , pathTo = require('dom-ot/lib/path-to')
-  , co = require('co')
   , jsonParse = require('json-stream')
   , through = require('through2')
+  , ObservValue = require('observ')
+  , ObservStruct = require('observ-struct')
+  , ObservVarhash = require('observ-varhash')
 
 module.exports = setup
-module.exports.consumes = ['ui', 'editor', 'models','hooks', 'presence']
+module.exports.consumes = ['ui', 'editor', 'presence']
 function setup(plugin, imports, register) {
   var ui = imports.ui
-  , hooks = imports.hooks
-  , Backbone = imports.models.Backbone
-
-  var link = document.createElement('link')
-  link.setAttribute('rel', 'stylesheet')
-  link.setAttribute('href', ui.baseURL+'/static/hive-plugin-cursor-broadcast-ckeditor/css/index.css')
-  document.head.appendChild(link)
 
   ui.page('/documents/:id', function(ctx, next) {
     // This plugin works with the default html editor only
-    if(ctx.document.get('type') !== 'html') return next()
+    if(ui.state.document.get('type') !== 'html') return next()
 
-    var cke_inner = document.querySelector('#editor .cke_inner')
-      , wysiwyg_frame = document.querySelector('#editor .cke_inner .cke_wysiwyg_frame')
-      , tree = h('div.Cursors')
-      , container = vdom.create(tree)
-      , authors = ctx.presentUsers
-      , broadcast = ctx.broadcast.createDuplexStream(new Buffer('cursors'))
-      , cursors = {}
-
-    cke_inner.appendChild(container)
-
-    var initialized = false
-    broadcast
-    .pipe(jsonParse())
-    .pipe(through.obj(function(broadcastCursors, enc, cb) {
-      for(var userId in broadcastCursors) {
-        cursors[userId] = broadcastCursors[userId]
-      }
-      authors.add(Object.keys(broadcastCursors).map(function(id) {return {id: id}}))
-      if(initialized) render(cursors)
-      else ctx.editableDocument.on('init', function() {
-        setTimeout(function() {
-          render(cursors)
-        },0)
-        initialized = true
-      })
-      cb()
+    ui.state.put('cursorBroadcast', ObservStruct({
+      cursors: ObservVarhash()
+    , area: ObservValue({top:0,left:0,height:0,width:0})
     }))
 
-    // If the main editor window is scrolled, scroll the cursors, too
-    var editorWindow = ctx.editableDocument.rootNode.ownerDocument.defaultView
-    editorWindow.addEventListener('scroll', function() {
-      container.scrollTop = editorWindow.scrollY
-      container.scrollLeft = editorWindow.scrollX
+    var state = ui.state.cursorBroadcast
+
+    ui.state.events['editor:load'].listen(function(editableDocument) {
+      var tree = h('div.Cursors')
+        , rootNode = vdom.create(tree)
+        , broadcast = ctx.broadcast.createDuplexStream(new Buffer('cursors'))
+        , editorRoot = editableDocument.rootNode
+
+      document.querySelector('.Editor__content').appendChild(rootNode)
+
+      ui.state(function(snapshot) {
+        var newtree = render(snapshot)
+        var patches = vdom.diff(tree, newtree)
+        vdom.patch(rootNode, patches)
+        tree = newtree
+        rootNode.scrollTop = editorRoot.scrollY
+      })
+
+      // As soon as doc is initialized, listen on broadcast
+      editableDocument.on('init', function() {
+        broadcast
+        .pipe(jsonParse())
+        .pipe(through.obj(function(broadcastCursors, enc, cb) {
+          // Convert all to coordinates
+          var cursors = pathsToCoordinates(broadcastCursors, editorRoot, window)
+          // update per user
+          for(var userId in cursors) {
+            if(userId == ui.state.user.get('id')) continue
+            state.cursors.put(userId, cursors[userId])
+          }
+          cb()
+        }))
+      })
+
+      // If the main editor window is scrolled, scroll the cursors, too
+      editorRoot.addEventListener('scroll', function() {
+        rootNode.scrollTop = editorRoot.scrollTop
+        rootNode.scrollLeft = editorRoot.scrollLeft
+      })
+
+      setInterval(function() {
+        // Broadcast the caret regularly
+        var sel = window.getSelection()
+          , range = sel.getRangeAt(0) // XXX: Might make sense to broadcast more than one
+        try {
+          var obj = {
+            start: [pathTo(range.startContainer, editorRoot), range.startOffset]
+          , end: [pathTo(range.endContainer, editorRoot), range.endOffset]
+          }
+          broadcast.write(JSON.stringify(obj)+'\n')
+        }catch(e) {
+          console.log(e)
+        }
+
+        // adjust canvas regularly
+        state.area.set(editorRoot.getBoundingClientRect())
+      }, 1000)
+
     })
 
-    setInterval(function() {
-      var sel = editorWindow.getSelection()
-        , range = sel.getRangeAt(0)
-        , rootNode = ctx.editableDocument.rootNode
-      var obj = {
-        start: [pathTo(range.startContainer, rootNode), range.startOffset]
-      , end: [pathTo(range.endContainer, rootNode), range.endOffset]
-      }
-      broadcast.write(JSON.stringify(obj)+'\n')
-    }, 1000)
-
-    // If a color changes, re-render!
-    authors.on('change:color', function(){
-      render(cursors)
-    })
-
-    function render(cursors) {
-      try {
-        cursors = pathsToCoordinates(cursors, ctx.editableDocument.rootNode, editorWindow)
-        var rect = wysiwyg_frame.getBoundingClientRect()
-        var newtree = h('div.Cursors', {style: {
-            // Position container directly above the editing window
-              top: (rect.top+window.scrollY)+'px'
-            , left: (rect.left+window.scrollX)+'px'
-            , width: rect.width+'px'
-            , height: rect.height+'px'
-            }
-          },
-          // Visualize cursors by drawing a line for each author
-          Object.keys(cursors)
-          .filter(function(authorId) {return !!authors.get(authorId)}) // only present users
-          .filter(function(authorId) {return authorId !== ctx.user.get('id')}) // not me
-          .map(function(author) {
+    function render(state) {
+      var bodyRect = document.querySelector('.body').getBoundingClientRect()
+      return h('div.Cursors', {style: {
+          // Position container directly above the editing area
+            top: (state.cursorBroadcast.area.top+window.scrollY-bodyRect.top)+'px'
+          , left: (state.cursorBroadcast.area.left+window.scrollX)+'px'
+          , width: state.cursorBroadcast.area.width+'px'
+          , height: state.cursorBroadcast.area.height+'px'
+          }
+        },
+        // Visualize cursors by drawing a line for each author
+        Object.keys(state.cursorBroadcast.cursors)
+        .filter(function(authorId) {return !!state.presence.users[authorId]}) // only users that are present
+        .filter(function(authorId) {return authorId !== state.user.id}) // not me
+        .map(function(authorId) {
+          var user = state.presence.users[authorId]
+            , cursors = state.cursorBroadcast.cursors[authorId]
+          return cursors.map(function(cursor) {
             return h('div.Cursors__Cursor', {
-                attributes:{ title: authors.get(author).get('name')}
-              , style: {
-                    'border-color': authors.get(author).get('color') || '#777'
-                  , 'left': cursors[author].x+'px'
-                  , 'top': cursors[author].y+'px'
-                  , 'width': cursors[author].width+'px'
-                  , 'height': cursors[author].height+'px'
-                  }
-                })
-          })
-          .concat(
-          // Display the authors name alongside their cursor
-          Object.keys(cursors)
-          .filter(function(authorId) {return !!authors.get(authorId)}) // only present users
-          .filter(function(authorId) {return authorId !== ctx.user.get('id')}) // not me
-          .map(function(author) {
-            return h('div.Cursors__Label', {
-              style: {
-                  'left': cursors[author].x+'px'
-                , 'top': 'calc('+cursors[author].y+'px - .4cm)'
+              attributes:{ title: user.name}
+            , style: {
+                  'border-color': user.color || '#777'
+                , 'left': cursor.x+'px'
+                , 'top': cursor.y+'px'
+                , 'width': cursor.width+'px'
+                , 'height': cursor.height+'px'
                 }
-              }, authors.get(author).get('name'))
-          })
-          )
-          .concat(
-          // Scroll fix! To ensure scrollability we add an empty cursor right at teh end of the document
-          h('div.Cursors__Cursor', {style: {
-            top: (ctx.editableDocument.rootNode.clientHeight+100)+'px' // +100 because there might be some margin or sth, better safe than sorry...
-          }})
-          )
-
+              })
+          }).reduce(function(result, el) {
+            return result.concat(el)
+          }, [])
+        })
+        .concat(
+        // Display the authors name alongside their cursor
+        Object.keys(state.cursorBroadcast.cursors)
+        .filter(function(authorId) {return !!state.presence.users[authorId]}) // only users that are present
+        .filter(function(authorId) {return authorId !== state.user.id}) // not me
+        .map(function(authorId) {
+          var cursor = state.cursorBroadcast.cursors[authorId][0]
+          return h('div.Cursors__Label', {
+            style: {
+                'left': cursor.x+'px'
+              , 'top': 'calc('+cursor.y+'px - .4cm)'
+              }
+            }, state.presence.users[authorId].name)
+        })
+        )
+        .concat(
+        // Scroll fix! To ensure scrollability we add an empty cursor right at teh end of the document
+        h('div.Cursors__Cursor', {style: {
+          top: (ctx.editableDocument.rootNode.clientHeight+100)+'px' // +100 because there might be some margin or sth, better safe than sorry...
+        }})
         )
 
-        // Construct the diff between the new and the old drawing and update the live dom tree
-        var patches = vdom.diff(tree, newtree)
-        vdom.patch(container, patches)
-        tree = newtree
-        container.scrollTop = editorWindow.scrollY
-        container.scrollLeft = editorWindow.scrollX
-      }catch(e) {
-        console.log(e)
-      }
+      )
     }
 
     next()
@@ -162,15 +166,24 @@ function setup(plugin, imports, register) {
 function pathsToCoordinates(cursors, rootNode, editorWindow) {
   var coordinates = {}
   Object.keys(cursors).forEach(function(userId) {
-    var range = document.createRange()
-    range.setStart(nodeAt(cursors[userId].start[0], rootNode), cursors[userId].start[1])
-    range.setEnd(nodeAt(cursors[userId].end[0], rootNode), cursors[userId].end[1])
-    var rect = range.getBoundingClientRect()
-    coordinates[userId] = {
-      x: rect.left+editorWindow.scrollX
-    , y: rect.top+editorWindow.scrollY
-    , width: rect.width
-    , height: rect.height
+    try {
+      // Create a range
+      var range = document.createRange()
+      range.setStart(nodeAt(cursors[userId].start[0], rootNode), cursors[userId].start[1])
+      range.setEnd(nodeAt(cursors[userId].end[0], rootNode), cursors[userId].end[1])
+      // ... and determine its dimensions
+      var rects = Array.prototype.slice.call(range.getClientRects())
+        , editorRect = rootNode.getBoundingClientRect()
+      coordinates[userId] = rects.map(function (rect) {
+        return {
+          x: rect.left+editorWindow.scrollX-editorRect.left
+        , y: rect.top+editorWindow.scrollY-editorRect.top
+        , width: rect.width
+        , height: rect.height
+        }
+      })
+    }catch(e) {
+      console.log(e)
     }
   })
   return coordinates
