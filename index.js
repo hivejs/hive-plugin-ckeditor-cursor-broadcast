@@ -20,14 +20,14 @@ var through = require('through2')
   , path = require('path')
 
 module.exports = setup
-module.exports.consumes = ['assets', 'broadcast']
+module.exports.consumes = ['ui', 'broadcast']
 
 function setup(plugin, imports, register) {
-  var assets = imports.assets
+  var ui = imports.ui
     , broadcast = imports.broadcast
 
-  assets.registerModule(path.join(__dirname, 'client.js'))
-  assets.registerStylesheet(path.join(__dirname, 'css/index.css'))
+  ui.registerModule(path.join(__dirname, 'client.js'))
+  ui.registerStylesheet(path.join(__dirname, 'css/index.css'))
 
   var cursors = {}
 
