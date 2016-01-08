@@ -105,8 +105,9 @@ function setup(plugin, imports, register) {
       rootNode.scrollLeft = editorRoot.scrollLeft
     })
 
-    setInterval(function() {
-      // Broadcast the caret regularly
+    editorRoot.addEventListener('click', collectCursor)
+    editorRoot.addEventListener('keydown', collectCursor)
+    function collectCursor() {
       var sel = window.getSelection()
         , range = sel.getRangeAt(0) // XXX: Might make sense to broadcast more than one
       try {
@@ -118,12 +119,16 @@ function setup(plugin, imports, register) {
       }catch(e) {
         console.log(e)
       }
+    }
 
-      // adjust canvas regularly
+    setTimeout(updateCanvasArea, 100)
+    window.addEventListener('scroll', updateCanvasArea)
+    window.addEventListener('resize', updateCanvasArea)
+    function updateCanvasArea() {
       ui.store.dispatch(
         cursorBroadcast.action_setCanvasArea(editorRoot.getBoundingClientRect(), editorRoot.scrollHeight)
       )
-    }, 1000)
+    }
   })
 
   function render(store) {
