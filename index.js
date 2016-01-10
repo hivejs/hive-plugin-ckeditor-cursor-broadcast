@@ -15,48 +15,55 @@
  * You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-var through = require('through2')
+var co = require('co')
+  , through = require('through2')
   , JSONParse = require('json-stream')
   , path = require('path')
 
 module.exports = setup
-module.exports.consumes = ['ui', 'broadcast']
+module.exports.consumes = ['ui', 'broadcast', 'hooks']
 
 function setup(plugin, imports, register) {
   var ui = imports.ui
     , broadcast = imports.broadcast
+    , hooks = imports.hooks
 
   ui.registerModule(path.join(__dirname, 'client.js'))
   ui.registerStylesheet(path.join(__dirname, 'css/index.css'))
 
   var cursors = {}
 
-  broadcast.registerChannel(new Buffer('cursors'), function(user, document, client, brdcst) {
-    if(!cursors[document]) cursors[document] = {}
+  hooks.on('orm:initialized', function(models) {
+    broadcast.registerChannel(new Buffer('cursors'), function(user, document, client, brdcst) {
+      co(function*() {
+        if((yield models.document.findOne(document)).type !== 'html') return
+        if(!cursors[document]) cursors[document] = {}
 
-    client
-    .pipe(JSONParse())
-    .pipe(through.obj(function(myCursor, enc, callback) {
-      cursors[document][user.id] = myCursor
-      var obj = {}
-      obj[user.id] = myCursor
-      this.push(obj)
-      callback()
-    }))
-    .pipe(JSONStringify())
-    .pipe(brdcst)
-    .pipe(JSONParse())
-    .pipe(through.obj(function(broadcastCursors, enc, callback) {
-      for(var userId in broadcastCursors) {
-        cursors[document][userId] = broadcastCursors[userId]
-      }
-      this.push(broadcastCursors)
-      callback()
-    }))
-    .pipe(JSONStringify())
-    .pipe(client)
+        client
+        .pipe(JSONParse())
+        .pipe(through.obj(function(myCursor, enc, callback) {
+          cursors[document][user.id] = myCursor
+          var obj = {}
+          obj[user.id] = myCursor
+          this.push(obj)
+          callback()
+        }))
+        .pipe(JSONStringify())
+        .pipe(brdcst)
+        .pipe(JSONParse())
+        .pipe(through.obj(function(broadcastCursors, enc, callback) {
+          for(var userId in broadcastCursors) {
+            cursors[document][userId] = broadcastCursors[userId]
+          }
+          this.push(broadcastCursors)
+          callback()
+        }))
+        .pipe(JSONStringify())
+        .pipe(client)
 
-    client.write(JSON.stringify(cursors[document])+'\n')
+        client.write(JSON.stringify(cursors[document])+'\n')
+      })
+    })
   })
 
   register()
