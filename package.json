@@ -6,7 +6,8 @@
   "dependencies": {
     "through2": "1.x",
     "json-stream": "1.x",
-    "dom-ot": "2.x",
+    "domnode-at-path": "1.x",
+    "path-to-domnode": "1.x",
     "virtual-dom": "2.x",
     "co": "4.x"
   },

@@ -18,8 +18,8 @@
 
 var vdom = require('virtual-dom')
   , h = vdom.h
-  , nodeAt = require('dom-ot/lib/ops/node-at')
-  , pathTo = require('dom-ot/lib/path-to')
+  , nodeAt = require('domnode-at-path')
+  , pathTo = require('path-to-domnode')
   , jsonParse = require('json-stream')
   , through = require('through2')
 
