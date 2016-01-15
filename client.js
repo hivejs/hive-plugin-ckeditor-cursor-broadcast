@@ -65,14 +65,14 @@ function setup(plugin, imports, register) {
     }
   }
 
-  editor.onLoad((editableDocument, broadcast) => {
+  editor.onLoad((editableDocument, broadcast, onClose) => {
     // This plugin works with ckeditor only
     if(ui.store.getState().editor.editor !== 'CKeditor') return
 
     var tree = h('div.Cursors')
       , rootNode = vdom.create(tree)
     document.querySelector('.Editor__content').appendChild(rootNode)
-    ui.store.subscribe(function() {
+    var dispose = ui.store.subscribe(function() {
       var newtree = render(ui.store)
       var patches = vdom.diff(tree, newtree)
       vdom.patch(rootNode, patches)
@@ -100,7 +100,7 @@ function setup(plugin, imports, register) {
     })
 
     // If the main editor window is scrolled, scroll the cursors, too
-    editorRoot.addEventListener('scroll', function() {
+    editorRoot.addEventListener('scroll', function onscroll() {
       rootNode.scrollTop = editorRoot.scrollTop
       rootNode.scrollLeft = editorRoot.scrollLeft
     })
@@ -129,6 +129,18 @@ function setup(plugin, imports, register) {
         cursorBroadcast.action_setCanvasArea(editorRoot.getBoundingClientRect(), editorRoot.scrollHeight)
       )
     }
+
+    onClose(_=> {
+      dispose()
+
+      editorRoot.removeEventListener('scroll', onscroll)
+
+      editorRoot.removeEventListener('click', collectCursor)
+      editorRoot.removeEventListener('keydown', collectCursor)
+
+      window.removeEventListener('scroll', updateCnavasArea)
+      window.removeEventListener('resize', updateCnavasArea)
+    })
   })
 
   function render(store) {
