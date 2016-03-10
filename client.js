@@ -166,7 +166,7 @@ function setup(plugin, imports, register) {
           return h('div.Cursors__Cursor', {
             attributes:{ title: user.name}
           , style: {
-                'border-color': user.color || '#777'
+                'border-color': user.attributes.color || '#777'
               , 'left': cursor.x+'px'
               , 'top': cursor.y+'px'
               , 'width': cursor.width+'px'
@@ -189,7 +189,7 @@ function setup(plugin, imports, register) {
               'left': cursor.x+'px'
             , 'top': 'calc('+cursor.y+'px - .4cm)'
             }
-          }, state.presence.users[authorId].name)
+          }, state.presence.users[authorId].attributes.name)
       })
       )
       .concat(
