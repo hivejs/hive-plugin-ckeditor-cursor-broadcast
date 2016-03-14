@@ -42,7 +42,11 @@ function setup(plugin, imports, register) {
       }
     }
     if(UPDATE_CURSORS === action.type) {
-      return {...state, cursors: {...state.cursors, ...action.payload}}
+      var newState = {...state, cursors: {...state.cursors, ...action.payload}}
+      for(var userId in newState.cursors) {
+        if(!newState.cursors[userId]) delete newState.cursors[userId]
+      }
+      return newstate
     }
     if(SET_CANVAS_AREA === action.type) {
       return {...state, area: action.payload}
