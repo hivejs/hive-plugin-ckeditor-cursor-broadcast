@@ -39,6 +39,8 @@ function setup(plugin, imports, register) {
         if((yield models.document.findOne(document)).type !== 'html') return
         if(!cursors[document]) cursors[document] = {}
 
+        var writeAll
+
         client
         .pipe(JSONParse())
         .pipe(through.obj(function(myCursor, enc, callback) {
@@ -48,7 +50,7 @@ function setup(plugin, imports, register) {
           this.push(obj)
           callback()
         }))
-        .pipe(JSONStringify())
+        .pipe(writeAll = JSONStringify())
         .pipe(brdcst)
         .pipe(JSONParse())
         .pipe(through.obj(function(broadcastCursors, enc, callback) {
@@ -60,6 +62,11 @@ function setup(plugin, imports, register) {
         }))
         .pipe(JSONStringify())
         .pipe(client)
+
+        client.on('close', () => {
+          writeAll.write({[user.id]: null})
+          cursors[document][user.id] = null
+        })
 
         client.write(JSON.stringify(cursors[document])+'\n')
       })
