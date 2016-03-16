@@ -142,8 +142,8 @@ function setup(plugin, imports, register) {
       editorRoot.removeEventListener('click', collectCursor)
       editorRoot.removeEventListener('keydown', collectCursor)
 
-      window.removeEventListener('scroll', updateCnavasArea)
-      window.removeEventListener('resize', updateCnavasArea)
+      window.removeEventListener('scroll', updateCanvasArea)
+      window.removeEventListener('resize', updateCanvasArea)
     })
   })
 
