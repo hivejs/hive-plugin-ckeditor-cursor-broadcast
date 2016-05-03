@@ -9,7 +9,8 @@
     "domnode-at-path": "1.x",
     "path-to-domnode": "1.x",
     "virtual-dom": "2.x",
-    "co": "4.x"
+    "co": "4.x",
+    "hive-plugin-author-colors": "*"
   },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
