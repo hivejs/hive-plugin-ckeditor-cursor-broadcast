@@ -32,44 +32,42 @@ function setup(plugin, imports, register) {
 
   var cursors = {}
 
-  hooks.on('orm:initialized', function(models) {
-    broadcast.registerChannel(new Buffer('cursors'), function(user, document, client, brdcst) {
-      co(function*() {
-        if((yield models.document.findOne(document)).type !== 'html') return
-        if(!cursors[document]) cursors[document] = {}
+  broadcast.registerChannel(new Buffer('cursors'), function(user, document, client, brdcst) {
+    co(function*() {
+      if((yield models.document.findOne(document)).type !== 'html') return
+      if(!cursors[document]) cursors[document] = {}
 
-        var writeAll
+      var writeAll
 
-        client
-        .pipe(JSONParse())
-        .pipe(through.obj(function(myCursor, enc, callback) {
-          cursors[document][user.id] = myCursor
-          var obj = {}
-          obj[user.id] = myCursor
-          this.push(obj)
-          callback()
-        }))
-        .pipe(writeAll = JSONStringify())
-        .pipe(brdcst)
-        .pipe(JSONParse())
-        .pipe(through.obj(function(broadcastCursors, enc, callback) {
-          for(var userId in broadcastCursors) {
-            cursors[document][userId] = broadcastCursors[userId]
-            if(!broadcastCursors[userId]) delete cursors[document][userId]
-          }
-          this.push(broadcastCursors)
-          callback()
-        }))
-        .pipe(JSONStringify())
-        .pipe(client)
+      client
+      .pipe(JSONParse())
+      .pipe(through.obj(function(myCursor, enc, callback) {
+        cursors[document][user.id] = myCursor
+        var obj = {}
+        obj[user.id] = myCursor
+        this.push(obj)
+        callback()
+      }))
+      .pipe(writeAll = JSONStringify())
+      .pipe(brdcst)
+      .pipe(JSONParse())
+      .pipe(through.obj(function(broadcastCursors, enc, callback) {
+        for(var userId in broadcastCursors) {
+          cursors[document][userId] = broadcastCursors[userId]
+          if(!broadcastCursors[userId]) delete cursors[document][userId]
+        }
+        this.push(broadcastCursors)
+        callback()
+      }))
+      .pipe(JSONStringify())
+      .pipe(client)
 
-        client.on('close', () => {
-          writeAll.write({[user.id]: null})
-          delete cursors[document][user.id]
-        })
-
-        client.write(JSON.stringify(cursors[document])+'\n')
+      client.on('close', () => {
+        writeAll.write({[user.id]: null})
+        delete cursors[document][user.id]
       })
+
+      client.write(JSON.stringify(cursors[document])+'\n')
     })
   })
 
